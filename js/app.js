@@ -12,7 +12,7 @@ const CONFIG = {
     // Options:
     // 1. Deploy your own Cloudflare Worker (see worker/binance-proxy.js)
     // 2. Use a public CORS proxy (less reliable)
-    CORS_PROXY: '', // Set to your Cloudflare Worker URL, e.g., 'https://binance-proxy.xxx.workers.dev'
+    CORS_PROXY: 'https://silver-ops-proxy.liu-huan-arthur.workers.dev', // Your Cloudflare Worker URL
     
     // Binance Futures API
     BINANCE_FUTURES: 'https://fapi.binance.com',
