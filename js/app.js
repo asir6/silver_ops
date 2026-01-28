@@ -8,6 +8,12 @@
 // Configuration
 // ============================================
 const CONFIG = {
+    // CORS Proxy for Binance API (needed for browser access)
+    // Options:
+    // 1. Deploy your own Cloudflare Worker (see worker/binance-proxy.js)
+    // 2. Use a public CORS proxy (less reliable)
+    CORS_PROXY: '', // Set to your Cloudflare Worker URL, e.g., 'https://binance-proxy.xxx.workers.dev'
+    
     // Binance Futures API
     BINANCE_FUTURES: 'https://fapi.binance.com',
     
@@ -15,7 +21,7 @@ const CONFIG = {
     SYMBOL: 'XAGUSDT',
 
     // Refresh interval in milliseconds
-    REFRESH_INTERVAL: 3000,
+    REFRESH_INTERVAL: 5000,
 
     // Strategy levels (in USD per oz)
     LEVELS: {
@@ -99,19 +105,26 @@ function updateLastRefresh() {
 // ============================================
 // Binance Futures API Functions
 // ============================================
+function getApiUrl(path) {
+    // Use CORS proxy if configured, otherwise direct (may fail due to CORS)
+    if (CONFIG.CORS_PROXY) {
+        return `${CONFIG.CORS_PROXY}${path}`;
+    }
+    return `${CONFIG.BINANCE_FUTURES}${path}`;
+}
+
 async function fetchBinanceData() {
-    const baseUrl = CONFIG.BINANCE_FUTURES;
     const symbol = CONFIG.SYMBOL;
 
     try {
         // Fetch multiple endpoints in parallel
         const [priceRes, oiRes, lsRes, fundingRes, depthRes, ticker24hRes] = await Promise.all([
-            fetch(`${baseUrl}/fapi/v1/ticker/price?symbol=${symbol}`).catch(() => null),
-            fetch(`${baseUrl}/fapi/v1/openInterest?symbol=${symbol}`).catch(() => null),
-            fetch(`${baseUrl}/futures/data/globalLongShortAccountRatio?symbol=${symbol}&period=5m&limit=1`).catch(() => null),
-            fetch(`${baseUrl}/fapi/v1/fundingRate?symbol=${symbol}&limit=1`).catch(() => null),
-            fetch(`${baseUrl}/fapi/v1/depth?symbol=${symbol}&limit=50`).catch(() => null),
-            fetch(`${baseUrl}/fapi/v1/ticker/24hr?symbol=${symbol}`).catch(() => null)
+            fetch(getApiUrl(`/fapi/v1/ticker/price?symbol=${symbol}`)).catch(() => null),
+            fetch(getApiUrl(`/fapi/v1/openInterest?symbol=${symbol}`)).catch(() => null),
+            fetch(getApiUrl(`/futures/data/globalLongShortAccountRatio?symbol=${symbol}&period=5m&limit=1`)).catch(() => null),
+            fetch(getApiUrl(`/fapi/v1/fundingRate?symbol=${symbol}&limit=1`)).catch(() => null),
+            fetch(getApiUrl(`/fapi/v1/depth?symbol=${symbol}&limit=50`)).catch(() => null),
+            fetch(getApiUrl(`/fapi/v1/ticker/24hr?symbol=${symbol}`)).catch(() => null)
         ]);
 
         // Parse responses
@@ -121,6 +134,16 @@ async function fetchBinanceData() {
         const funding = fundingRes?.ok ? await fundingRes.json() : null;
         const depth = depthRes?.ok ? await depthRes.json() : null;
         const ticker24h = ticker24hRes?.ok ? await ticker24hRes.json() : null;
+
+        // Check if we got any data at all
+        if (!price && !oi && !ls && !funding && !ticker24h) {
+            console.error('All API requests failed - likely CORS or network issue');
+            console.log('💡 To fix: Deploy Cloudflare Worker from worker/binance-proxy.js');
+            console.log('   Then set CONFIG.CORS_PROXY to your worker URL');
+            setConnectionStatus(false, '🔴 CORS Error');
+            showNoData();
+            return;
+        }
 
         // Calculate order book pressure (Ask/Bid ratio)
         let sellPressure = null;
@@ -180,7 +203,7 @@ async function fetchBinanceData() {
 
 async function checkSymbolAvailability() {
     try {
-        const response = await fetch(`${CONFIG.BINANCE_FUTURES}/fapi/v1/ticker/price?symbol=${CONFIG.SYMBOL}`);
+        const response = await fetch(getApiUrl(`/fapi/v1/ticker/price?symbol=${CONFIG.SYMBOL}`));
         if (response.ok) {
             const data = await response.json();
             if (data.price) {
@@ -188,10 +211,10 @@ async function checkSymbolAvailability() {
                 return true;
             }
         }
-        console.warn(`⚠️ Symbol ${CONFIG.SYMBOL} not available`);
+        console.warn(`⚠️ Symbol ${CONFIG.SYMBOL} not available or CORS blocked`);
         return false;
     } catch (error) {
-        console.error('Failed to check symbol:', error);
+        console.error('Failed to check symbol (likely CORS):', error);
         return false;
     }
 }
