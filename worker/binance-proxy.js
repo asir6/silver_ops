@@ -3,15 +3,10 @@
  * 
  * Proxies Binance Futures API requests to bypass CORS restrictions
  * Deploy to Cloudflare Workers (free tier: 100,000 requests/day)
- * 
- * Deployment Instructions:
- * 1. Go to https://workers.cloudflare.com/
- * 2. Create a new Worker
- * 3. Paste this code
- * 4. Deploy and note the URL (e.g., binance-proxy.your-subdomain.workers.dev)
- * 5. Update CONFIG.PROXY_BASE in js/app.js with your Worker URL
  */
 
+// Use external proxy to bypass Binance geo-restrictions
+const PROXY_SERVER = 'https://146.190.190.94:3128';
 const BINANCE_BASE = 'https://fapi.binance.com';
 
 // Whitelist of allowed Binance API paths for security
@@ -132,17 +127,44 @@ export default {
         try {
             const binanceUrl = BINANCE_BASE + path;
 
-            // Fetch from Binance with timeout
+            // Fetch from Binance through proxy with timeout
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10000);
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-            const response = await fetch(binanceUrl, {
-                headers: {
-                    'User-Agent': 'Silver-Ops-Proxy/1.0',
-                    'Accept': 'application/json'
-                },
-                signal: controller.signal
-            });
+            // Try direct first, then through proxy if blocked
+            let response;
+            try {
+                // Method 1: Direct request with browser headers
+                response = await fetch(binanceUrl, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': 'application/json, text/plain, */*',
+                        'Accept-Language': 'en-US,en;q=0.9',
+                        'Origin': 'https://www.binance.com',
+                        'Referer': 'https://www.binance.com/'
+                    },
+                    signal: controller.signal
+                });
+
+                // If blocked (403), try through proxy
+                if (response.status === 403) {
+                    throw new Error('Direct request blocked, trying proxy');
+                }
+            } catch (directError) {
+                // Method 2: Request through proxy server
+                // Format: proxy receives the target URL as a query parameter or path
+                const proxyUrl = `${PROXY_SERVER}/?url=${encodeURIComponent(binanceUrl)}`;
+                
+                response = await fetch(proxyUrl, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': 'application/json, text/plain, */*',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-Target-URL': binanceUrl
+                    },
+                    signal: controller.signal
+                });
+            }
 
             clearTimeout(timeoutId);
 
