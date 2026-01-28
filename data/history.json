@@ -1,0 +1,15 @@
+[
+  {
+    "timestamp": "2026-01-28T19:56:51.663Z",
+    "source": "cme",
+    "registered_oz": 34180016.519999996,
+    "eligible_oz": 34180016.519999996,
+    "total_oz": 68360033.03999999,
+    "comex_oi": null,
+    "fetch_status": {
+      "cme": "success",
+      "yahoo": "failed",
+      "cftc": "failed"
+    }
+  }
+]

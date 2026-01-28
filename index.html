@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Silver Ops - Personal Trading Dashboard for XAG/USD short-selling strategy">
+  <meta name="theme-color" content="#0d1117">
+  <title>Silver Ops | Trading Dashboard</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+</head>
+<body>
+  <header>
+    <div class="header-left">
+      <h1>🥈 Silver Ops</h1>
+      <span class="status-badge" id="connection-status">Connecting...</span>
+    </div>
+    <div class="header-right">
+      <span id="last-update">Loading...</span>
+      <button id="refresh-btn" title="Refresh Data">🔄</button>
+    </div>
+  </header>
+  
+  <main>
+    <!-- Section A: Strategy Levels -->
+    <section id="strategy-panel">
+      <h2>📍 Strategy Levels (XAG/USD)</h2>
+      <div class="level-grid">
+        <div class="level short-zone">
+          <span class="label">Short Zone</span>
+          <span class="value" id="short-zone-value">$32.50 - $33.50</span>
+          <span class="hint">Enter shorts here</span>
+        </div>
+        <div class="level stop-loss">
+          <span class="label">Stop Loss</span>
+          <span class="value" id="stop-loss-value">$34.50</span>
+          <span class="hint">Exit if breached</span>
+        </div>
+        <div class="level target">
+          <span class="label">Target</span>
+          <span class="value" id="target-value">$28.00</span>
+          <span class="hint">Take profit</span>
+        </div>
+        <div class="level current-price">
+          <span class="label">Current Price</span>
+          <span class="value" id="current-price">--</span>
+          <span class="hint" id="price-position">--</span>
+        </div>
+      </div>
+    </section>
+    
+    <!-- Section B: Real-time Binance Data -->
+    <section id="realtime-panel">
+      <h2>📊 Binance Real-Time Data</h2>
+      <div id="binance-data">
+        <div class="metric">
+          <span class="label">XAG/USD Price</span>
+          <span id="price" class="value">--</span>
+          <span class="change" id="price-change">--</span>
+        </div>
+        <div class="metric">
+          <span class="label">Long/Short Ratio</span>
+          <span id="ls-ratio" class="value">--</span>
+          <span class="hint">Above 2.5 = Crowded Long</span>
+        </div>
+        <div class="metric">
+          <span class="label">Open Interest</span>
+          <span id="oi" class="value">--</span>
+          <span class="change" id="oi-change">--</span>
+        </div>
+        <div class="metric">
+          <span class="label">Funding Rate (Ann.)</span>
+          <span id="funding" class="value">--</span>
+          <span class="hint">Positive = Pay to long</span>
+        </div>
+        <div class="metric">
+          <span class="label">Sell Pressure (Ask/Bid)</span>
+          <span id="sell-pressure" class="value">--</span>
+          <span class="hint">Above 1.2 = Bearish</span>
+        </div>
+        <div class="metric">
+          <span class="label">24h Volume</span>
+          <span id="volume" class="value">--</span>
+          <span class="change" id="volume-change">--</span>
+        </div>
+      </div>
+    </section>
+    
+    <!-- Section C: Signal Summary -->
+    <section id="signal-panel">
+      <h2>🎯 Signal Summary</h2>
+      <div id="signals">
+        <div class="signal" id="signal-price">
+          <span class="indicator">⚪</span>
+          <span class="signal-label">Price in Short Zone</span>
+        </div>
+        <div class="signal" id="signal-ls">
+          <span class="indicator">⚪</span>
+          <span class="signal-label">Crowded Long (L/S > 2.5)</span>
+        </div>
+        <div class="signal" id="signal-funding">
+          <span class="indicator">⚪</span>
+          <span class="signal-label">Positive Funding Rate</span>
+        </div>
+        <div class="signal" id="signal-pressure">
+          <span class="indicator">⚪</span>
+          <span class="signal-label">High Sell Pressure (> 1.2)</span>
+        </div>
+      </div>
+      <div id="overall-signal">
+        <span class="label">Overall Signal:</span>
+        <span id="signal-result" class="value">WAIT</span>
+      </div>
+    </section>
+    
+    <!-- Section D: Macro History Chart -->
+    <section id="macro-panel">
+      <h2>📈 COMEX Inventory vs Open Interest</h2>
+      <div class="chart-controls">
+        <button class="chart-btn active" data-range="7">7D</button>
+        <button class="chart-btn" data-range="30">30D</button>
+        <button class="chart-btn" data-range="90">90D</button>
+        <button class="chart-btn" data-range="all">All</button>
+      </div>
+      <div class="chart-container">
+        <canvas id="macro-chart"></canvas>
+      </div>
+      <div class="chart-legend">
+        <span class="legend-item">
+          <span class="legend-color" style="background: rgba(192, 192, 192, 0.7)"></span>
+          Registered Inventory (M oz)
+        </span>
+        <span class="legend-item">
+          <span class="legend-color" style="background: rgba(255, 206, 86, 1)"></span>
+          Open Interest
+        </span>
+        <span class="legend-item">
+          <span class="legend-color" style="background: #f85149"></span>
+          Critical Level (30M oz)
+        </span>
+      </div>
+      <p class="chart-note">⚠️ When registered inventory drops below 30M oz with rising OI, expect supply squeeze</p>
+    </section>
+    
+    <!-- Section E: Data Table -->
+    <section id="data-table-panel">
+      <h2>📋 Recent Data History</h2>
+      <div class="table-container">
+        <table id="history-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Registered (oz)</th>
+              <th>Eligible (oz)</th>
+              <th>Total (oz)</th>
+              <th>Open Interest</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="history-tbody">
+            <tr>
+              <td colspan="6" class="loading">Loading data...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  
+  <footer>
+    <div class="footer-content">
+      <p>Data sources: CME Group, Binance Futures, Yahoo Finance</p>
+      <p>Auto-updated by GitHub Actions | <a href="https://github.com" target="_blank">View Source</a></p>
+    </div>
+    <div class="disclaimer">
+      ⚠️ This is a personal trading tool. Not financial advice. Trade at your own risk.
+    </div>
+  </footer>
+  
+  <script src="js/app.js"></script>
+</body>
+</html>
