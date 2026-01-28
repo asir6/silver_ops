@@ -174,7 +174,7 @@ async function fetchBinanceData() {
     } catch (error) {
         console.error('Binance fetch error:', error);
         setConnectionStatus(false, '🔴 API Error');
-        showDemoData();
+        showNoData();
     }
 }
 
@@ -196,54 +196,60 @@ async function checkSymbolAvailability() {
     }
 }
 
-function showDemoData() {
-    // Display demo/mock data when API is unavailable
-    const demoData = {
-        price: 32.85,
-        priceChange: 0.42,
-        oi: 125000000,
-        oiChange: -1.2,
-        lsRatio: 2.8,
-        funding: 12.5,
-        sellPressure: 1.35,
-        volume: 450000000,
-        volumeChange: 15.3
+function showNoData() {
+    // Display N/A when API is unavailable - NO FAKE DATA
+    const emptyData = {
+        price: null,
+        priceChange: null,
+        oi: null,
+        oiChange: null,
+        lsRatio: null,
+        funding: null,
+        sellPressure: null,
+        volume: null
     };
 
-    updateBinanceUI(demoData);
-    updateSignals(demoData);
+    updateBinanceUI(emptyData);
+    updateSignals(emptyData);
 
-    // Mark as demo
-    document.getElementById('connection-status').textContent = '🟡 Demo';
-    document.getElementById('connection-status').className = 'status-badge demo';
+    // Mark as offline
+    document.getElementById('connection-status').textContent = '🔴 Offline';
+    document.getElementById('connection-status').className = 'status-badge disconnected';
 }
 
 function updateBinanceUI(data) {
     // Price
     const priceEl = document.getElementById('price');
     const currentPriceEl = document.getElementById('current-price');
-    priceEl.textContent = formatPrice(data.price);
-    currentPriceEl.textContent = formatPrice(data.price);
+    priceEl.textContent = data.price ? formatPrice(data.price) : 'N/A';
+    currentPriceEl.textContent = data.price ? formatPrice(data.price) : 'N/A';
 
     // Price change
     const priceChangeEl = document.getElementById('price-change');
-    if (data.priceChange !== null) {
+    if (data.priceChange !== null && data.priceChange !== undefined) {
         priceChangeEl.textContent = formatPercent(data.priceChange);
         priceChangeEl.className = 'change ' + (data.priceChange >= 0 ? 'positive' : 'negative');
+    } else {
+        priceChangeEl.textContent = '--';
+        priceChangeEl.className = 'change';
     }
 
     // Open Interest
-    document.getElementById('oi').textContent = formatNumber(data.oi) + ' USDT';
+    const oiEl = document.getElementById('oi');
+    oiEl.textContent = data.oi ? formatNumber(data.oi) + ' USDT' : 'N/A';
     const oiChangeEl = document.getElementById('oi-change');
-    if (data.oiChange !== null) {
+    if (data.oiChange !== null && data.oiChange !== undefined) {
         oiChangeEl.textContent = formatPercent(data.oiChange);
         oiChangeEl.className = 'change ' + (data.oiChange >= 0 ? 'positive' : 'negative');
+    } else {
+        oiChangeEl.textContent = '--';
+        oiChangeEl.className = 'change';
     }
 
     // Long/Short Ratio
     const lsEl = document.getElementById('ls-ratio');
-    lsEl.textContent = data.lsRatio?.toFixed(2) || '--';
-    if (data.lsRatio > CONFIG.ALERTS.LS_RATIO_HIGH) {
+    lsEl.textContent = data.lsRatio ? data.lsRatio.toFixed(2) : 'N/A';
+    if (data.lsRatio && data.lsRatio > CONFIG.ALERTS.LS_RATIO_HIGH) {
         lsEl.classList.add('alert-high');
     } else {
         lsEl.classList.remove('alert-high');
@@ -251,22 +257,26 @@ function updateBinanceUI(data) {
 
     // Funding Rate
     const fundingEl = document.getElementById('funding');
-    if (data.funding !== null) {
+    if (data.funding !== null && data.funding !== undefined) {
         fundingEl.textContent = formatPercent(data.funding);
         fundingEl.className = 'value ' + (data.funding >= 0 ? 'positive' : 'negative');
+    } else {
+        fundingEl.textContent = 'N/A';
+        fundingEl.className = 'value';
     }
 
     // Sell Pressure
     const pressureEl = document.getElementById('sell-pressure');
-    pressureEl.textContent = data.sellPressure?.toFixed(2) || '--';
-    if (data.sellPressure > CONFIG.ALERTS.SELL_PRESSURE_HIGH) {
+    pressureEl.textContent = data.sellPressure ? data.sellPressure.toFixed(2) : 'N/A';
+    if (data.sellPressure && data.sellPressure > CONFIG.ALERTS.SELL_PRESSURE_HIGH) {
         pressureEl.classList.add('alert-bearish');
     } else {
         pressureEl.classList.remove('alert-bearish');
     }
 
     // Volume
-    document.getElementById('volume').textContent = formatNumber(data.volume) + ' USDT';
+    const volumeEl = document.getElementById('volume');
+    volumeEl.textContent = data.volume ? formatNumber(data.volume) + ' USDT' : 'N/A';
 
     // Price position indicator
     updatePricePosition(data.price);
@@ -633,10 +643,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         fetchBinanceData();
         state.refreshTimer = setInterval(fetchBinanceData, CONFIG.REFRESH_INTERVAL);
     } else {
-        // Show demo data if symbol not available
-        console.log('Using demo data - Silver not available on Binance Futures');
-        showDemoData();
-        setConnectionStatus(false, '🟡 Demo Mode');
+        // Show N/A if symbol not available - NO FAKE DATA
+        console.log('Symbol not available on Binance Futures');
+        showNoData();
+        setConnectionStatus(false, '🔴 Unavailable');
     }
 
     console.log('✅ Dashboard initialized');
