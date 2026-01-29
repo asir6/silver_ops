@@ -17,8 +17,8 @@ const CONFIG = {
     // Binance symbol for silver
     SYMBOL: 'XAGUSDT',
 
-    // Refresh interval in milliseconds (30 seconds to avoid Binance rate limits)
-    REFRESH_INTERVAL: 30000,
+    // Refresh interval in milliseconds
+    REFRESH_INTERVAL: 5000,
 
     // Strategy levels (in USD per oz)
     LEVELS: {
