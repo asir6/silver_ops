@@ -3,10 +3,12 @@
  * 
  * Proxies Binance Futures API requests to bypass CORS restrictions
  * Deploy to Cloudflare Workers (free tier: 100,000 requests/day)
+ * 
+ * Environment Variables (set in Cloudflare Dashboard):
+ * - PROXY_SERVER: Your proxy server URL (e.g., https://your-proxy.com:3128)
+ * - PROXY_SECRET: Secret token for proxy authentication
  */
 
-// Use external proxy to bypass Binance geo-restrictions
-const PROXY_SERVER = 'https://146.190.190.94:3128';
 const BINANCE_BASE = 'https://fapi.binance.com';
 
 // Whitelist of allowed Binance API paths for security
@@ -151,15 +153,22 @@ export default {
                     throw new Error('Direct request blocked, trying proxy');
                 }
             } catch (directError) {
-                // Method 2: Request through proxy server
-                // Format: proxy receives the target URL as a query parameter or path
-                const proxyUrl = `${PROXY_SERVER}/?url=${encodeURIComponent(binanceUrl)}`;
+                // Method 2: Request through proxy server (configured via environment variable)
+                const proxyServer = env.PROXY_SERVER;
+                const proxySecret = env.PROXY_SECRET || '';
                 
+                if (!proxyServer) {
+                    throw new Error('Proxy server not configured');
+                }
+                
+                // Send request through proxy with secret token
+                const proxyUrl = `${proxyServer}/?url=${encodeURIComponent(binanceUrl)}`;
+
                 response = await fetch(proxyUrl, {
                     headers: {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                         'Accept': 'application/json, text/plain, */*',
-                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-Proxy-Secret': proxySecret,  // Secret token for authentication
                         'X-Target-URL': binanceUrl
                     },
                     signal: controller.signal
