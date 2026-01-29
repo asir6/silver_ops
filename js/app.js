@@ -45,7 +45,9 @@ let state = {
     history: [],
     chart: null,
     refreshTimer: null,
-    symbolAvailable: null
+    symbolAvailable: null,
+    fundingTime: null,
+    countdownTimer: null
 };
 
 // ============================================
@@ -57,6 +59,38 @@ function formatNumber(num) {
     if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
     if (num >= 1e3) return (num / 1e3).toFixed(2) + 'K';
     return num.toFixed(2);
+}
+
+function updateFundingCountdown(fundingTime) {
+    const countdownEl = document.getElementById('funding-countdown');
+    if (!countdownEl) return;
+
+    const update = () => {
+        const now = Date.now();
+        const diff = fundingTime - now;
+
+        if (diff <= 0) {
+            countdownEl.textContent = 'Settling...';
+            return;
+        }
+
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+        countdownEl.textContent = `Next in: ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    };
+
+    // Update immediately
+    update();
+
+    // Clear existing timer if any
+    if (state.countdownTimer) {
+        clearInterval(state.countdownTimer);
+    }
+
+    // Update every second
+    state.countdownTimer = setInterval(update, 1000);
 }
 
 function formatPrice(num) {
@@ -180,10 +214,14 @@ async function fetchBinanceData() {
             oiValue = currentOI * currentPrice;
         }
 
-        // Calculate annualized funding rate (funding is charged 3x per day)
-        let fundingAnnualized = null;
+        // Get 4-hour funding rate (as percentage) and next funding time
+        let fundingRate4h = null;
+        let fundingTime = null;
         if (funding?.[0]?.fundingRate) {
-            fundingAnnualized = parseFloat(funding[0].fundingRate) * 100 * 3 * 365;
+            fundingRate4h = parseFloat(funding[0].fundingRate) * 100;  // Convert to percentage
+        }
+        if (funding?.[0]?.fundingTime) {
+            fundingTime = parseInt(funding[0].fundingTime);  // Unix timestamp in ms
         }
 
         // Get Long/Short ratio
@@ -198,7 +236,8 @@ async function fetchBinanceData() {
             oi: oiValue,  // OI in USDT value
             oiChange: oiChange,
             lsRatio: lsRatio,
-            funding: fundingAnnualized,
+            funding: fundingRate4h,  // 4-hour funding rate as percentage
+            fundingTime: fundingTime,  // Next funding time (unix ms)
             sellPressure: sellPressure,
             volume: ticker24h?.quoteVolume ? parseFloat(ticker24h.quoteVolume) : null
         };
@@ -299,14 +338,24 @@ function updateBinanceUI(data) {
         lsEl.classList.remove('alert-high');
     }
 
-    // Funding Rate
+    // Funding Rate (4H) and Countdown
     const fundingEl = document.getElementById('funding');
+    const fundingCountdownEl = document.getElementById('funding-countdown');
     if (data.funding !== null && data.funding !== undefined) {
-        fundingEl.textContent = formatPercent(data.funding);
+        // Display as percentage with more decimals for small values
+        const fundingDisplay = data.funding.toFixed(4) + '%';
+        fundingEl.textContent = fundingDisplay;
         fundingEl.className = 'value ' + (data.funding >= 0 ? 'positive' : 'negative');
     } else {
         fundingEl.textContent = 'N/A';
         fundingEl.className = 'value';
+    }
+
+    // Update funding countdown timer
+    if (data.fundingTime) {
+        updateFundingCountdown(data.fundingTime);
+        // Store fundingTime for continuous countdown updates
+        state.fundingTime = data.fundingTime;
     }
 
     // Sell Pressure
