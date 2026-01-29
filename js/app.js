@@ -17,8 +17,8 @@ const CONFIG = {
     // Binance symbol for silver
     SYMBOL: 'XAGUSDT',
 
-    // Refresh interval in milliseconds
-    REFRESH_INTERVAL: 5000,
+    // Refresh interval in milliseconds (30 seconds to avoid Binance rate limits)
+    REFRESH_INTERVAL: 30000,
 
     // Strategy levels (in USD per oz)
     LEVELS: {
@@ -132,6 +132,16 @@ async function fetchBinanceData() {
         const depth = depthRes?.ok ? await depthRes.json() : null;
         const ticker24h = ticker24hRes?.ok ? await ticker24hRes.json() : null;
 
+        // Debug: Log raw API responses
+        console.log('📊 Binance API Responses:', {
+            price,
+            oi,
+            ls,
+            funding,
+            depth: depth ? { bids: depth.bids?.length, asks: depth.asks?.length } : null,
+            ticker24h
+        });
+
         // Check if we got any data at all
         if (!price && !oi && !ls && !funding && !ticker24h) {
             console.error('All API requests failed - likely CORS or network issue');
@@ -144,24 +154,30 @@ async function fetchBinanceData() {
 
         // Calculate order book pressure (Ask/Bid ratio)
         let sellPressure = null;
-        if (depth?.bids && depth?.asks) {
+        if (depth?.bids && depth?.asks && depth.bids.length > 0 && depth.asks.length > 0) {
             const bidSum = depth.bids.reduce((sum, [p, q]) => sum + parseFloat(p) * parseFloat(q), 0);
             const askSum = depth.asks.reduce((sum, [p, q]) => sum + parseFloat(p) * parseFloat(q), 0);
             sellPressure = bidSum > 0 ? (askSum / bidSum) : null;
         }
 
-        // Calculate price change from last update
+        // Get price change from 24h ticker
         let priceChange = null;
         if (ticker24h?.priceChangePercent) {
             priceChange = parseFloat(ticker24h.priceChangePercent);
-        } else if (state.lastPrice && price?.price) {
-            priceChange = ((parseFloat(price.price) - state.lastPrice) / state.lastPrice) * 100;
         }
 
-        // Calculate OI change
+        // Calculate OI change (only if we have previous OI)
         let oiChange = null;
-        if (state.lastOI && oi?.openInterest) {
-            oiChange = ((parseFloat(oi.openInterest) - state.lastOI) / state.lastOI) * 100;
+        const currentOI = oi?.openInterest ? parseFloat(oi.openInterest) : null;
+        if (state.lastOI && currentOI) {
+            oiChange = ((currentOI - state.lastOI) / state.lastOI) * 100;
+        }
+
+        // Calculate Open Interest in USDT (OI contracts * price)
+        let oiValue = null;
+        const currentPrice = price?.price ? parseFloat(price.price) : null;
+        if (currentOI && currentPrice) {
+            oiValue = currentOI * currentPrice;
         }
 
         // Calculate annualized funding rate (funding is charged 3x per day)
@@ -170,20 +186,28 @@ async function fetchBinanceData() {
             fundingAnnualized = parseFloat(funding[0].fundingRate) * 100 * 3 * 365;
         }
 
+        // Get Long/Short ratio
+        let lsRatio = null;
+        if (ls && Array.isArray(ls) && ls.length > 0 && ls[0]?.longShortRatio) {
+            lsRatio = parseFloat(ls[0].longShortRatio);
+        }
+
         const data = {
-            price: price?.price ? parseFloat(price.price) : null,
+            price: currentPrice,
             priceChange: priceChange,
-            oi: oi?.openInterest ? parseFloat(oi.openInterest) : null,
+            oi: oiValue,  // OI in USDT value
             oiChange: oiChange,
-            lsRatio: ls?.[0]?.longShortRatio ? parseFloat(ls[0].longShortRatio) : null,
+            lsRatio: lsRatio,
             funding: fundingAnnualized,
             sellPressure: sellPressure,
             volume: ticker24h?.quoteVolume ? parseFloat(ticker24h.quoteVolume) : null
         };
 
+        console.log('📈 Processed data:', data);
+
         // Update state for next comparison
-        if (data.price) state.lastPrice = data.price;
-        if (data.oi) state.lastOI = data.oi;
+        if (currentPrice) state.lastPrice = currentPrice;
+        if (currentOI) state.lastOI = currentOI;
 
         // Update UI
         updateBinanceUI(data);

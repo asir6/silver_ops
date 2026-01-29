@@ -103,7 +103,9 @@ export default {
                 status: 'ok',
                 service: 'Silver Ops Binance Proxy',
                 timestamp: new Date().toISOString(),
-                allowedPaths: ALLOWED_PATHS
+                allowedPaths: ALLOWED_PATHS,
+                proxyConfigured: !!env.PROXY_SERVER,
+                proxyServer: env.PROXY_SERVER ? env.PROXY_SERVER.replace(/\/\/.*@/, '//***@') : 'not set'
             }), {
                 headers: {
                     'Content-Type': 'application/json',
@@ -133,57 +135,58 @@ export default {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-            // Try direct first, then through proxy if blocked
+            // Always use proxy server
+            const proxyServer = env.PROXY_SERVER;
+            const proxySecret = env.PROXY_SECRET || '';
+
+            if (!proxyServer) {
+                throw new Error('Proxy server not configured. Set PROXY_SERVER environment variable.');
+            }
+
+            // Send request through proxy with secret token
+            const proxyUrl = `${proxyServer}/?url=${encodeURIComponent(binanceUrl)}`;
+
             let response;
+            let fetchError = null;
             try {
-                // Method 1: Direct request with browser headers
-                response = await fetch(binanceUrl, {
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                        'Accept': 'application/json, text/plain, */*',
-                        'Accept-Language': 'en-US,en;q=0.9',
-                        'Origin': 'https://www.binance.com',
-                        'Referer': 'https://www.binance.com/'
-                    },
-                    signal: controller.signal
-                });
-
-                // If blocked (403), try through proxy
-                if (response.status === 403) {
-                    throw new Error('Direct request blocked, trying proxy');
-                }
-            } catch (directError) {
-                // Method 2: Request through proxy server (configured via environment variable)
-                const proxyServer = env.PROXY_SERVER;
-                const proxySecret = env.PROXY_SECRET || '';
-                
-                if (!proxyServer) {
-                    throw new Error('Proxy server not configured');
-                }
-                
-                // Send request through proxy with secret token
-                const proxyUrl = `${proxyServer}/?url=${encodeURIComponent(binanceUrl)}`;
-
                 response = await fetch(proxyUrl, {
                     headers: {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                         'Accept': 'application/json, text/plain, */*',
-                        'X-Proxy-Secret': proxySecret,  // Secret token for authentication
+                        'X-Proxy-Secret': proxySecret,
                         'X-Target-URL': binanceUrl
                     },
                     signal: controller.signal
                 });
+            } catch (proxyError) {
+                fetchError = proxyError;
+                throw new Error(`Proxy fetch failed: ${proxyError.name}: ${proxyError.message}`);
             }
 
             clearTimeout(timeoutId);
 
-            // Check if Binance returned an error
+            // Get response details for debugging
+            const responseHeaders = {};
+            response.headers.forEach((value, key) => {
+                responseHeaders[key] = value;
+            });
+
+            // Check if API returned an error
             if (!response.ok) {
                 const errorText = await response.text();
                 return new Response(JSON.stringify({
-                    error: 'Binance API error',
+                    error: 'API error',
                     status: response.status,
-                    message: errorText
+                    statusText: response.statusText,
+                    message: errorText,
+                    debug: {
+                        proxyServer: proxyServer,
+                        proxyUrl: proxyUrl,
+                        targetUrl: binanceUrl,
+                        responseHeaders: responseHeaders,
+                        responseType: response.type,
+                        responseUrl: response.url
+                    }
                 }), {
                     status: response.status,
                     headers: {
@@ -211,10 +214,18 @@ export default {
         } catch (error) {
             // Handle timeout or other errors
             const isTimeout = error.name === 'AbortError';
+            const proxyServer = env.PROXY_SERVER || 'not set';
 
             return new Response(JSON.stringify({
                 error: isTimeout ? 'Request timeout' : 'Proxy error',
-                message: error.message
+                errorName: error.name,
+                errorMessage: error.message,
+                errorStack: error.stack,
+                debug: {
+                    proxyServer: proxyServer,
+                    proxySecret: env.PROXY_SECRET ? 'set' : 'not set',
+                    timestamp: new Date().toISOString()
+                }
             }), {
                 status: isTimeout ? 504 : 500,
                 headers: {
