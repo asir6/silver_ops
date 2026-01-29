@@ -8,11 +8,10 @@
 // Configuration
 // ============================================
 const CONFIG = {
-    // CORS Proxy disabled - user uses system proxy
-    // To re-enable, set to your Cloudflare Worker URL
-    CORS_PROXY: null,
+    // Cloudflare Worker proxy for Binance API (bypasses CORS)
+    CORS_PROXY: 'https://silver-ops-proxy.liu-huan-arthur.workers.dev',
 
-    // Binance Futures API (direct access, requires system proxy or CORS extension)
+    // Binance Futures API
     BINANCE_FUTURES: 'https://fapi.binance.com',
 
     // Binance symbol for silver
