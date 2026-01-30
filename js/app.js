@@ -186,12 +186,41 @@ async function fetchBinanceData() {
             return;
         }
 
-        // Calculate order book pressure (Ask/Bid ratio)
-        let sellPressure = null;
-        if (depth?.bids && depth?.asks && depth.bids.length > 0 && depth.asks.length > 0) {
-            const bidSum = depth.bids.reduce((sum, [p, q]) => sum + parseFloat(p) * parseFloat(q), 0);
-            const askSum = depth.asks.reduce((sum, [p, q]) => sum + parseFloat(p) * parseFloat(q), 0);
-            sellPressure = bidSum > 0 ? (askSum / bidSum) : null;
+        // Get current price first (needed for order book analysis)
+        const currentPrice = price?.price ? parseFloat(price.price) : null;
+
+        // Calculate order book within ±5% of current price
+        let asks5pct = null;  // Total USDT of asks within +5%
+        let bids5pct = null;  // Total USDT of bids within -5%
+        let orderRatio = null;  // asks5pct / bids5pct
+        
+        if (depth?.bids && depth?.asks && currentPrice) {
+            const upperLimit = currentPrice * 1.05;  // +5%
+            const lowerLimit = currentPrice * 0.95;  // -5%
+            
+            // Sum asks within +5% of current price (price <= upperLimit)
+            asks5pct = depth.asks
+                .filter(([p, q]) => parseFloat(p) <= upperLimit)
+                .reduce((sum, [p, q]) => sum + parseFloat(p) * parseFloat(q), 0);
+            
+            // Sum bids within -5% of current price (price >= lowerLimit)
+            bids5pct = depth.bids
+                .filter(([p, q]) => parseFloat(p) >= lowerLimit)
+                .reduce((sum, [p, q]) => sum + parseFloat(p) * parseFloat(q), 0);
+            
+            // Calculate ratio
+            if (bids5pct > 0) {
+                orderRatio = asks5pct / bids5pct;
+            }
+            
+            console.log('📊 Order Book Analysis (±5%):', {
+                currentPrice,
+                upperLimit,
+                lowerLimit,
+                asks5pct,
+                bids5pct,
+                orderRatio
+            });
         }
 
         // Get price change from 24h ticker
@@ -209,7 +238,6 @@ async function fetchBinanceData() {
 
         // Calculate Open Interest in USDT (OI contracts * price)
         let oiValue = null;
-        const currentPrice = price?.price ? parseFloat(price.price) : null;
         if (currentOI && currentPrice) {
             oiValue = currentOI * currentPrice;
         }
@@ -238,7 +266,9 @@ async function fetchBinanceData() {
             lsRatio: lsRatio,
             funding: fundingRate4h,  // 4-hour funding rate as percentage
             fundingTime: fundingTime,  // Next funding time (unix ms)
-            sellPressure: sellPressure,
+            asks5pct: asks5pct,  // Asks within +5%
+            bids5pct: bids5pct,  // Bids within -5%
+            orderRatio: orderRatio,  // asks/bids ratio
             volume: ticker24h?.quoteVolume ? parseFloat(ticker24h.quoteVolume) : null
         };
 
@@ -358,13 +388,35 @@ function updateBinanceUI(data) {
         state.fundingTime = data.fundingTime;
     }
 
-    // Sell Pressure
-    const pressureEl = document.getElementById('sell-pressure');
-    pressureEl.textContent = data.sellPressure ? data.sellPressure.toFixed(2) : 'N/A';
-    if (data.sellPressure && data.sellPressure > CONFIG.ALERTS.SELL_PRESSURE_HIGH) {
-        pressureEl.classList.add('alert-bearish');
-    } else {
-        pressureEl.classList.remove('alert-bearish');
+    // Asks within +5%
+    const asks5pctEl = document.getElementById('asks-5pct');
+    if (asks5pctEl) {
+        asks5pctEl.textContent = data.asks5pct ? formatNumber(data.asks5pct) + ' USDT' : 'N/A';
+    }
+
+    // Bids within -5%
+    const bids5pctEl = document.getElementById('bids-5pct');
+    if (bids5pctEl) {
+        bids5pctEl.textContent = data.bids5pct ? formatNumber(data.bids5pct) + ' USDT' : 'N/A';
+    }
+
+    // Ask/Bid Ratio (±5%)
+    const orderRatioEl = document.getElementById('order-ratio');
+    if (orderRatioEl) {
+        if (data.orderRatio !== null && data.orderRatio !== undefined) {
+            orderRatioEl.textContent = data.orderRatio.toFixed(2);
+            // Color coding: > 1 means more sells (bearish), < 1 means more buys (bullish)
+            if (data.orderRatio > 1.2) {
+                orderRatioEl.className = 'value negative';  // Strong selling pressure
+            } else if (data.orderRatio < 0.8) {
+                orderRatioEl.className = 'value positive';  // Strong buying support
+            } else {
+                orderRatioEl.className = 'value';  // Neutral
+            }
+        } else {
+            orderRatioEl.textContent = 'N/A';
+            orderRatioEl.className = 'value';
+        }
     }
 
     // Volume

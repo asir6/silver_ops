@@ -78,9 +78,19 @@
                     <span class="hint" id="funding-countdown">Next in: --:--:--</span>
                 </div>
                 <div class="metric">
-                    <span class="label">Sell Pressure (Ask/Bid)</span>
-                    <span id="sell-pressure" class="value">--</span>
-                    <span class="hint">Above 1.2 = Bearish</span>
+                    <span class="label">Asks within +5%</span>
+                    <span id="asks-5pct" class="value">--</span>
+                    <span class="hint">Sell walls above price</span>
+                </div>
+                <div class="metric">
+                    <span class="label">Bids within -5%</span>
+                    <span id="bids-5pct" class="value">--</span>
+                    <span class="hint">Buy support below price</span>
+                </div>
+                <div class="metric">
+                    <span class="label">Ask/Bid Ratio (±5%)</span>
+                    <span id="order-ratio" class="value">--</span>
+                    <span class="hint">>1 = More selling pressure</span>
                 </div>
                 <div class="metric">
                     <span class="label">24h Volume</span>
