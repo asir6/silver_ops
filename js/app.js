@@ -149,11 +149,11 @@ async function fetchBinanceData() {
 
     try {
         // Fetch multiple endpoints in parallel
-        const [priceRes, oiRes, lsRes, fundingRes, depthRes, ticker24hRes] = await Promise.all([
+        const [priceRes, oiRes, lsRes, premiumIndexRes, depthRes, ticker24hRes] = await Promise.all([
             fetch(getApiUrl(`/fapi/v1/ticker/price?symbol=${symbol}`)).catch(() => null),
             fetch(getApiUrl(`/fapi/v1/openInterest?symbol=${symbol}`)).catch(() => null),
             fetch(getApiUrl(`/futures/data/globalLongShortAccountRatio?symbol=${symbol}&period=5m&limit=1`)).catch(() => null),
-            fetch(getApiUrl(`/fapi/v1/fundingRate?symbol=${symbol}&limit=1`)).catch(() => null),
+            fetch(getApiUrl(`/fapi/v1/premiumIndex?symbol=${symbol}`)).catch(() => null),  // Use premiumIndex for next funding rate
             fetch(getApiUrl(`/fapi/v1/depth?symbol=${symbol}&limit=50`)).catch(() => null),
             fetch(getApiUrl(`/fapi/v1/ticker/24hr?symbol=${symbol}`)).catch(() => null)
         ]);
@@ -162,7 +162,7 @@ async function fetchBinanceData() {
         const price = priceRes?.ok ? await priceRes.json() : null;
         const oi = oiRes?.ok ? await oiRes.json() : null;
         const ls = lsRes?.ok ? await lsRes.json() : null;
-        const funding = fundingRes?.ok ? await fundingRes.json() : null;
+        const premiumIndex = premiumIndexRes?.ok ? await premiumIndexRes.json() : null;
         const depth = depthRes?.ok ? await depthRes.json() : null;
         const ticker24h = ticker24hRes?.ok ? await ticker24hRes.json() : null;
 
@@ -171,13 +171,13 @@ async function fetchBinanceData() {
             price,
             oi,
             ls,
-            funding,
+            premiumIndex,
             depth: depth ? { bids: depth.bids?.length, asks: depth.asks?.length } : null,
             ticker24h
         });
 
         // Check if we got any data at all
-        if (!price && !oi && !ls && !funding && !ticker24h) {
+        if (!price && !oi && !ls && !premiumIndex && !ticker24h) {
             console.error('All API requests failed - likely CORS or network issue');
             console.log('💡 To fix: Deploy Cloudflare Worker from worker/binance-proxy.js');
             console.log('   Then set CONFIG.CORS_PROXY to your worker URL');
@@ -193,26 +193,26 @@ async function fetchBinanceData() {
         let asks5pct = null;  // Total USDT of asks within +5%
         let bids5pct = null;  // Total USDT of bids within -5%
         let orderRatio = null;  // asks5pct / bids5pct
-        
+
         if (depth?.bids && depth?.asks && currentPrice) {
             const upperLimit = currentPrice * 1.05;  // +5%
             const lowerLimit = currentPrice * 0.95;  // -5%
-            
+
             // Sum asks within +5% of current price (price <= upperLimit)
             asks5pct = depth.asks
                 .filter(([p, q]) => parseFloat(p) <= upperLimit)
                 .reduce((sum, [p, q]) => sum + parseFloat(p) * parseFloat(q), 0);
-            
+
             // Sum bids within -5% of current price (price >= lowerLimit)
             bids5pct = depth.bids
                 .filter(([p, q]) => parseFloat(p) >= lowerLimit)
                 .reduce((sum, [p, q]) => sum + parseFloat(p) * parseFloat(q), 0);
-            
+
             // Calculate ratio
             if (bids5pct > 0) {
                 orderRatio = asks5pct / bids5pct;
             }
-            
+
             console.log('📊 Order Book Analysis (±5%):', {
                 currentPrice,
                 upperLimit,
@@ -242,11 +242,16 @@ async function fetchBinanceData() {
             oiValue = currentOI * currentPrice;
         }
 
-        // Get 4-hour funding rate (as percentage) and next funding time
+        // Get 4-hour funding rate (as percentage) and next funding time from premiumIndex
         let fundingRate4h = null;
         let fundingTime = null;
-        if (funding?.[0]?.fundingRate) {
-            fundingRate4h = parseFloat(funding[0].fundingRate) * 100;  // Convert to percentage
+        if (premiumIndex?.lastFundingRate) {
+            fundingRate4h = parseFloat(premiumIndex.lastFundingRate) * 100;  // Convert to percentage
+            console.log('📊 Funding Rate from premiumIndex:', premiumIndex.lastFundingRate, '→', fundingRate4h, '%');
+        }
+        if (premiumIndex?.nextFundingTime) {
+            fundingTime = premiumIndex.nextFundingTime;
+            console.log('📊 Next Funding Time:', new Date(fundingTime).toISOString());
         }
         if (funding?.[0]?.fundingTime) {
             fundingTime = parseInt(funding[0].fundingTime);  // Unix timestamp in ms
