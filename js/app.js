@@ -154,7 +154,7 @@ async function fetchBinanceData() {
             fetch(getApiUrl(`/fapi/v1/openInterest?symbol=${symbol}`)).catch(() => null),
             fetch(getApiUrl(`/futures/data/globalLongShortAccountRatio?symbol=${symbol}&period=5m&limit=1`)).catch(() => null),
             fetch(getApiUrl(`/fapi/v1/premiumIndex?symbol=${symbol}`)).catch(() => null),  // Use premiumIndex for next funding rate
-            fetch(getApiUrl(`/fapi/v1/depth?symbol=${symbol}&limit=50`)).catch(() => null),
+            fetch(getApiUrl(`/fapi/v1/depth?symbol=${symbol}&limit=500`)).catch(() => null),  // Increased to 500 for ±5% coverage
             fetch(getApiUrl(`/fapi/v1/ticker/24hr?symbol=${symbol}`)).catch(() => null)
         ]);
 
