@@ -17,6 +17,7 @@ const ALLOWED_PATHS = [
     '/fapi/v1/ticker/24hr',
     '/fapi/v1/openInterest',
     '/fapi/v1/fundingRate',
+    '/fapi/v1/premiumIndex',  // For current funding rate and next funding time
     '/fapi/v1/depth',
     '/fapi/v1/exchangeInfo',
     '/futures/data/globalLongShortAccountRatio',
